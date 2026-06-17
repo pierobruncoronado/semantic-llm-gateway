@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from app import cache
+from app import cache, metrics
 from app.config import ANTHROPIC_API_KEY, DEFAULT_MODEL
 from app.embeddings import EmbeddingError, embed
 from app.injection import check_injection
@@ -35,6 +35,11 @@ def _cache_key_text(messages: list[MessageIn]) -> str | None:
     return None
 
 
+@app.get("/metrics")
+async def get_metrics():
+    return metrics.snapshot()
+
+
 @app.post("/v1/messages")
 async def create_message(body: CompletionRequestIn):
     request = CompletionRequest(
@@ -49,6 +54,7 @@ async def create_message(body: CompletionRequestIn):
     if cache_text is not None:
         match = check_injection(cache_text)
         if match is not None:
+            metrics.record_blocked()
             log_event(
                 event="injection_blocked",
                 injection_blocked=True,
@@ -78,6 +84,11 @@ async def create_message(body: CompletionRequestIn):
             cache_lookup_ms = round((time.monotonic() - lookup_start) * 1000, 1)
 
             if hit is not None:
+                metrics.record_hit(
+                    embedding_ms + cache_lookup_ms,
+                    hit.input_tokens,
+                    hit.output_tokens,
+                )
                 log_event(
                     event="request_complete",
                     model=hit.model,
@@ -124,6 +135,10 @@ async def create_message(body: CompletionRequestIn):
             output_tokens=response.output_tokens,
         )
 
+    miss_latency_ms = sum(
+        ms for ms in (embedding_ms, cache_lookup_ms, upstream_ms) if ms is not None
+    )
+    metrics.record_miss(miss_latency_ms)
     log_event(
         event="request_complete",
         model=response.model,

@@ -82,3 +82,33 @@ Solo decisiones (qué/por qué/cómo), no narración línea por línea. Referenc
 - `uvicorn_out.txt`/`uvicorn_err.txt` (redirección de stdout/stderr al correr el server en background) se agregaron a `.gitignore` — son artefactos de debug de cada corrida local, no contienen secrets pero tampoco deben versionarse.
 
 **Pendiente para próxima sesión:** endpoint `/metrics` (hit-rate, $ ahorrado, latencia hit vs miss, conteo de bloqueados por injection — el campo `injection_blocked` ya está en el log), caso 5 de la spec (payload abusivo/anti-abuso: rate limiting, truncado, cap de tamaño — no se tocó hoy), y la Fase 5 real de evals (sweep de umbral + falso-positivo rate medido en serio).
+
+## Día 5 — Endpoint de métricas (feature 5 de la spec)
+
+**Qué:** `app/metrics.py` (contadores agregados en memoria: `cache_hits`, `cache_misses`, `injection_blocked`, sumas de latencia hit/miss, tokens ahorrados input/output) + `GET /metrics` en `app/main.py` que expone esos contadores como JSON. Cableado en los 3 puntos donde `main.py` ya decidía `cache_hit`/`injection_blocked` — sin agregar instrumentación nueva, solo agregando lo que el pipeline ya calculaba.
+
+**Por qué tokens en vez de dólares:** se verificó (grep del repo) que no existe ninguna tabla de pricing por modelo en el código — solo se menciona como requisito futuro en `docs/spec.md`/`CLAUDE.md`, nunca un número real. Inventar un precio habría violado la regla de `CLAUDE.md` de no loguear/reportar números no medidos. Se reporta `tokens_saved` (input/output reales de las respuestas servidas desde cache) en vez de `$ ahorrado` — decisión del owner, confirmada antes de implementar. Si más adelante se agrega una fuente de pricing confiable, convertir tokens→USD es un cambio de una línea en `metrics.snapshot()`.
+
+**Por qué solo promedio de latencia, sin histograma:** `docs/spec.md` sección 6 menciona "histograma de latencia" pero el alcance pedido para esta sesión fue explícitamente "latencia media hit vs miss" — se implementa solo el promedio (suma/contador), no percentiles. Decisión de alcance del owner, no omisión accidental.
+
+**Límite de diseño explícito — un solo worker, sin lock:** los contadores de `app/metrics.py` son globals de módulo actualizados sin lock. Esto es seguro hoy porque el gateway corre con un único worker de uvicorn (mismo supuesto que ya documentó `cache.py` en Día 3 para las llamadas síncronas al SDK de Upstash) y porque cada actualización es una operación simple sin punto de `await` en medio, así que no hay interleaving posible entre corutinas. **Esto NO escala a múltiples workers/procesos**: cada worker tendría su propio set de contadores en memoria, y `/metrics` solo reflejaría el tráfico que cayó en ese proceso, no el agregado real. Escalar a multi-worker requeriría mover los contadores a un store compartido (p. ej. reusar Upstash Vector/Redis ya presentes en el stack) en vez de memoria de proceso. Decisión consciente, documentada para no repetir el supuesto sin querer cuando se toque despliegue/escala (fuera de alcance v1).
+
+**Cómo:**
+- `record_hit(latency_ms, input_tokens, output_tokens)` se llama en el branch de cache-hit con `embedding_ms + cache_lookup_ms` (las mismas etapas que ya se logueaban) y los tokens de la entrada cacheada.
+- `record_miss(latency_ms)` se llama en el branch final (la rama que ya logueaba `cache_hit=False`, incluye el caso degradado por fallo de embedding y el caso sin `cache_text` extraíble) con la suma de las etapas no-`None` (`embedding_ms`, `cache_lookup_ms`, `upstream_ms`).
+- `record_blocked()` se llama en el branch de injection, antes del `HTTPException(400)`.
+- `GET /metrics` no pasa por el pipeline de cache/injection — solo lee `metrics.snapshot()` y responde; no genera log `request_complete`.
+- `hit_rate`, `avg_latency_hit_ms`, `avg_latency_miss_ms` devuelven `null` si su contador correspondiente es 0 (evita división por cero y evita reportar un promedio sin datos).
+
+**Input → output verificado (ejecución real contra servidor local, secuencia completa):**
+1. Prompt nuevo (`"What is the freezing point of water in Celsius, metrics-test-day5?"`) → `200`, miss real (llamó a Anthropic). Log: `{"cache_hit": false, "embedding_ms": 1016.9, "cache_lookup_ms": 560.2, "upstream_ms": 1081.5, ...}`.
+2. Mismo prompt, ~1.5s después (margen de propagación de Upstash, gotcha de Día 3) → `200`, `id: null`, mismo contenido, `stop_reason: "end_turn"` → hit confirmado. Log: `{"cache_hit": true, "similarity_score": 1.0, "embedding_ms": 706.5, "cache_lookup_ms": 435.1, ...}`.
+3. Prompt de injection conocido (caso 4 de la spec) → `400`, log `{"event": "injection_blocked", "pattern_matched": "instruction_override", ...}`.
+4. `GET /metrics` → `{"cache_hits": 1, "cache_misses": 1, "hit_rate": 0.5, "avg_latency_hit_ms": 1141.6, "avg_latency_miss_ms": 2658.6, "tokens_saved": {"input_tokens": 26, "output_tokens": 32}, "injection_blocked_count": 1}`.
+   Verificado a mano: `1141.6 = 706.5 + 435.1` (hit), `2658.6 = 1016.9 + 560.2 + 1081.5` (miss), `tokens_saved` coincide exactamente con los tokens de la respuesta cacheada del paso 1-2.
+
+**Gotcha de proceso:** antes de levantar el server se corrió `netstat -ano | grep :8000` (lección de Día 4) — confirmado que no había ningún proceso viejo colgado antes de arrancar.
+
+**Verificación contra criterios de aceptación de la spec (sección 8):** el ítem de `/metrics` exponiendo hit-rate, ahorro (en tokens, no $ — ver arriba), latencia hit vs miss y conteo de bloqueados queda cumplido con datos medidos, no hand-waved. Los demás ítems de la sección 8 (evals formales, falso-positivo documentado antes/después, deploy, README) siguen pendientes — no son parte del alcance de esta sesión.
+
+**Pendiente para próxima sesión:** caso 5 de la spec (payload abusivo/anti-abuso: rate limiting, truncado, cap de tamaño), decidir namespace para evals formales, y la Fase 5 real (sweep de umbral + falso-positivo rate medido en serio). `$ ahorrado` en vez de tokens queda pendiente de una fuente de pricing confiable — no es bloqueante para el case study, pero anotar si surge una API/tabla de precios oficial de Anthropic a la que cablear `metrics.snapshot()`.
