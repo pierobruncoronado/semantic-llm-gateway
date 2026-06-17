@@ -30,3 +30,11 @@ VOYAGE_MODEL = os.environ.get("VOYAGE_MODEL", "voyage-3.5")
 # project's central tunable (see docs/spec.md sec. 3) and gets fixed by the
 # Fase 5 eval sweep, not by this default. See docs/DECISIONS.md "Día 3".
 CACHE_SIMILARITY_THRESHOLD = float(os.environ.get("CACHE_SIMILARITY_THRESHOLD", "0.92"))
+
+# Anti-abuse defaults (spec sec. 4 NFR anti-abuso, sec. 7 caso 5). Conservative
+# v1 starting points, not calibrated against real traffic — see
+# docs/DECISIONS.md "Día 6" for the reasoning and what would change this.
+RATE_LIMIT_MAX_REQUESTS = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "60"))
+RATE_LIMIT_WINDOW_SECONDS = float(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
+MAX_MESSAGE_CHARS = int(os.environ.get("MAX_MESSAGE_CHARS", "8000"))
+MAX_PAYLOAD_BYTES = int(os.environ.get("MAX_PAYLOAD_BYTES", "262144"))

@@ -1,11 +1,17 @@
 import time
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app import cache, metrics
-from app.config import ANTHROPIC_API_KEY, DEFAULT_MODEL
+from app import abuse, cache, metrics
+from app.config import (
+    ANTHROPIC_API_KEY,
+    DEFAULT_MODEL,
+    MAX_MESSAGE_CHARS,
+    MAX_PAYLOAD_BYTES,
+)
 from app.embeddings import EmbeddingError, embed
 from app.injection import check_injection
 from app.log import log_event
@@ -14,6 +20,19 @@ from app.providers.base import CompletionRequest, Message, ProviderError
 
 app = FastAPI(title="semantic-llm-gateway")
 provider = AnthropicProvider(api_key=ANTHROPIC_API_KEY)
+
+
+@app.middleware("http")
+async def payload_cap_middleware(request: Request, call_next):
+    if request.url.path == "/v1/messages":
+        body = await request.body()
+        if len(body) > MAX_PAYLOAD_BYTES:
+            log_event(event="payload_rejected", payload_bytes=len(body))
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Payload too large."},
+            )
+    return await call_next(request)
 
 
 class MessageIn(BaseModel):
@@ -41,7 +60,26 @@ async def get_metrics():
 
 
 @app.post("/v1/messages")
-async def create_message(body: CompletionRequestIn):
+async def create_message(body: CompletionRequestIn, http_request: Request):
+    bucket_key = http_request.headers.get("x-api-key") or (
+        http_request.client.host if http_request.client else "unknown"
+    )
+    if abuse.is_rate_limited(bucket_key):
+        log_event(event="rate_limited", bucket=abuse.mask_key(bucket_key))
+        raise HTTPException(
+            status_code=429,
+            detail="Rate limit exceeded. Try again later.",
+        )
+
+    for m in body.messages:
+        if isinstance(m.content, str) and len(m.content) > MAX_MESSAGE_CHARS:
+            log_event(
+                event="input_truncated",
+                original_length=len(m.content),
+                truncated_length=MAX_MESSAGE_CHARS,
+            )
+            m.content = m.content[:MAX_MESSAGE_CHARS]
+
     request = CompletionRequest(
         model=body.model,
         messages=[Message(role=m.role, content=m.content) for m in body.messages],
