@@ -26,10 +26,12 @@ if not VOYAGE_API_KEY:
 
 VOYAGE_MODEL = os.environ.get("VOYAGE_MODEL", "voyage-3.5")
 
-# Provisional starting point, NOT calibrated. The similarity threshold is the
-# project's central tunable (see docs/spec.md sec. 3) and gets fixed by the
-# Fase 5 eval sweep, not by this default. See docs/DECISIONS.md "Día 3".
-CACHE_SIMILARITY_THRESHOLD = float(os.environ.get("CACHE_SIMILARITY_THRESHOLD", "0.92"))
+# Calibrated via the Fase 5 threshold sweep (23-pair golden set, fp_rate as the
+# north-star metric) -- not a default picked by hand. fp_rate=0.00% on the
+# golden set, hit_rate=44.44%. See docs/DECISIONS.md "Día 7" for the full
+# sweep table and the irreducible overlap finding (max trap score 0.8953 vs
+# min genuine-paraphrase score 0.7567) that drove this number.
+CACHE_SIMILARITY_THRESHOLD = float(os.environ.get("CACHE_SIMILARITY_THRESHOLD", "0.90"))
 
 # Anti-abuse defaults (spec sec. 4 NFR anti-abuso, sec. 7 caso 5). Conservative
 # v1 starting points, not calibrated against real traffic — see

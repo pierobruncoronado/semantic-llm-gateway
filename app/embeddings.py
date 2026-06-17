@@ -18,3 +18,12 @@ def embed(text: str) -> list[float]:
         log_event(event="embedding_failed", error=str(e))
         raise EmbeddingError(f"Voyage embedding failed: {e}") from e
     return result.embeddings[0]
+
+
+def embed_batch(texts: list[str]) -> list[list[float]]:
+    try:
+        result = _client.embed(texts=texts, model=VOYAGE_MODEL)
+    except Exception as e:
+        log_event(event="embedding_failed", error=str(e))
+        raise EmbeddingError(f"Voyage embedding failed: {e}") from e
+    return result.embeddings
