@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app import cache
 from app.config import ANTHROPIC_API_KEY, DEFAULT_MODEL
 from app.embeddings import EmbeddingError, embed
+from app.injection import check_injection
 from app.log import log_event
 from app.providers.anthropic_provider import AnthropicProvider
 from app.providers.base import CompletionRequest, Message, ProviderError
@@ -44,6 +45,21 @@ async def create_message(body: CompletionRequestIn):
     )
 
     cache_text = _cache_key_text(body.messages)
+
+    if cache_text is not None:
+        match = check_injection(cache_text)
+        if match is not None:
+            log_event(
+                event="injection_blocked",
+                injection_blocked=True,
+                pattern_matched=match.pattern_name,
+                prompt_length=len(cache_text),
+            )
+            raise HTTPException(
+                status_code=400,
+                detail="Request blocked: prompt matched a known injection pattern.",
+            )
+
     vector: list[float] | None = None
     embedding_ms = None
     cache_lookup_ms = None
@@ -71,6 +87,7 @@ async def create_message(body: CompletionRequestIn):
                     similarity_score=hit.similarity_score,
                     embedding_ms=embedding_ms,
                     cache_lookup_ms=cache_lookup_ms,
+                    injection_blocked=False,
                 )
                 return {
                     "id": None,
@@ -116,6 +133,7 @@ async def create_message(body: CompletionRequestIn):
         embedding_ms=embedding_ms,
         cache_lookup_ms=cache_lookup_ms,
         upstream_ms=upstream_ms,
+        injection_blocked=False,
     )
 
     return {

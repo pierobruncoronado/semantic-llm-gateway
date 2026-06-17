@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .env
 .pytest_cache/
+uvicorn_out.txt
+uvicorn_err.txt
