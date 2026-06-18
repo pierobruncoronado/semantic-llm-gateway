@@ -213,3 +213,22 @@ Solo decisiones (qué/por qué/cómo), no narración línea por línea. Referenc
 - ⏳ **Pendiente-de-deploy:** verificación de README contra la URL pública real (el `curl` de "clone → run" local sí está verificado; el tramo Railway del README no se ejecutó contra una URL real).
 
 **Pendiente para cuando se libere cuota o se decida el upgrade:** crear el proyecto en Railway, cargar las 4 env vars, correr los 3 `curl` de verificación del README contra la URL pública, y marcar los dos ítems pendientes como ✅. Fuera de alcance, confirmado: CI gate del sweep de evals, `CASE_STUDY.md`, Loom.
+
+## Día 9 — `CASE_STUDY.md` (entregable de outreach)
+
+**Qué:** se escribe `docs/CASE_STUDY.md`, en inglés, audiencia empleadores, siguiendo la misma estructura que el case study de la clínica (problema → qué construí → arquitectura → hallazgo central → metodología de evals → resultados → decisiones/trade-offs → v2 → nota honesta de alcance). Outline y el set exacto de métricas a citar se confirmaron con el owner *antes* de escribir el documento completo — ninguna cifra del documento es nueva, todas vienen de `docs/DECISIONS.md` Día 3–8.
+
+**Por qué el overlap irreducible es el corazón del documento:** es el equivalente del "bug de primeros auxilios" de la clínica — la prueba de criterio, no de funcionamiento. El hallazgo (Día 7): el trap `p15` (0.8953) puntúa por encima de la paráfrasis genuina más baja `p01` (0.7567), así que ningún umbral del sweep logra `fp_rate=0%` y `fn_rate=0%` a la vez. El umbral `0.90` se documenta con su costo explícito (`fn_rate=55.56%`, margen de `0.0047` sobre el peor trap) en vez de presentarlo como un óptimo limpio.
+
+**Correcciones de precisión hechas tras revisión del owner (las 2 que cazaría un entrevistador técnico):**
+1. **El número `0.8977`** (tope de las 5 paráfrasis perdidas con umbral 0.90) está verificado contra `docs/DECISIONS.md` Día 7 — es correcto, no es error de transcripción. Pero es una cifra *distinta* del tope de los traps (`0.8953`) y el borrador inicial no lo distinguía, lo cual podía leerse como una contradicción (una paráfrasis perdida puntuando más alto que el peor trap). Se agregó una frase aclaratoria en §4: `0.8977` es un score de paráfrasis, no de trap, y el hecho de que supere `0.8953` y aun así quede bajo `0.90` es un segundo dato del mismo overlap, no una contradicción del primero.
+2. **Lenguaje de integración con la clínica** (§2 y el diagrama de §3) implicaba una conexión en vivo end-to-end que nunca se probó — lo único verificado es compatibilidad de forma (mismo shape de request/response) vía smoke tests directos contra el gateway. Se corrigió a "cliente modelado en la clínica" / "patrón de integración, no conexión en vivo verificada", consistente con cómo ya lo había registrado Día 8 ("passthrough con mismo shape", sin afirmar conexión real con la app de la clínica).
+
+**Se agregó un TL;DR de 4 frases al inicio** (qué es, el hallazgo del overlap, build-complete con deploy diferido) — para audiencia de outreach que no va a leer 144 líneas.
+
+**Verificación contra criterios de aceptación de la spec (sección 8) — estado de cierre, esta sesión:**
+- Sin cambios en los ítems técnicos (siguen como cerró Día 8: deploy ⏳ por cuota, resto ✅).
+- **`CASE_STUDY.md` (lista "terminado-contratable") pasa a ✅** — completo, con métricas reales y las 2 correcciones de precisión incorporadas.
+- Siguen pendientes: deploy real (bloqueado por cuota, sin cambios) y Loom (no se tocó esta sesión, fuera de alcance).
+
+**Pendiente para próxima sesión:** Loom (90s, enlazado en el README); deploy a Railway cuando se libere cuota o se decida upgrade.
