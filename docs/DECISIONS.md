@@ -192,4 +192,24 @@ Solo decisiones (qué/por qué/cómo), no narración línea por línea. Referenc
 
 **Verificación contra criterios de aceptación de la spec (sección 8):** "Desplegado en cloud, responde con la laptop apagada" y "README reproducible (clonar → correr en <10min)" quedan **pendientes de que el owner complete el deploy en el dashboard** — el repo está listo (Dockerfile probado localmente con build+run real, README con pasos exactos de Railway y verificación post-deploy con `curl`), pero el ítem no se marca ✅ hasta que la URL pública responda con la laptop apagada.
 
-**Pendiente para próxima sesión:** el owner completa el deploy manual en el dashboard de Railway (crear proyecto, conectar GitHub, cargar las 4 env vars); correr el smoke test contra la URL pública una vez asignada; marcar los dos criterios de aceptación pendientes. Fuera de alcance, confirmado: CI gate del sweep de evals, `CASE_STUDY.md`, Loom.
+**Cierre de sesión — deploy diferido por límite de tier gratuito (no es un fallo técnico):** el owner decidió no crear el proyecto en Railway hoy porque la cuenta free ya tiene dos proyectos activos (`whatsapp-clinic-agent`, `analyst-sql-agen`) y el plan no permite un tercero sin upgrade. Esto es una restricción de cuota de cuenta, no una falla de la integración: el smoke test con Docker (build + run reales, ver arriba) ya prueba que el contenedor funciona end-to-end con las credenciales reales — `/health`, `/metrics` y `/v1/messages` los tres `200`, incluida una llamada real a Anthropic. El repo queda **listo para deploy en cualquier momento** sin trabajo adicional: `Dockerfile` probado, `railway.json` con healthcheck, `README.md` con los pasos exactos del dashboard. Se completa liberando cuota (pausar/eliminar uno de los otros dos proyectos) o con upgrade de plan — decisión del owner, no de esta sesión.
+
+**Build técnico — las 6 fases completas y verificadas, estado real al cierre:**
+1. Passthrough crudo (`POST /v1/messages` → Anthropic vía `Provider`).
+2. Caching semántico (Voyage + Upstash Vector), umbral calibrado a `CACHE_SIMILARITY_THRESHOLD=0.90` vía sweep de 23 pares (Día 7) — no un default a ojo.
+3. Filtro de prompt-injection pre-call (rechazo duro 400, heurísticas regex).
+4. `GET /metrics` (hit-rate, tokens ahorrados, latencia hit/miss, conteo de bloqueados).
+5. Defensas anti-abuso (rate limit por bucket, cap de payload, truncado de input).
+6. Evals formales: caso 1-5 de la spec corridos con evidencia real, sweep de umbral con fp_rate como métrica estrella.
+
+**Verificación contra criterios de aceptación de la spec (sección 8) — estado de cierre:**
+- ✅ Clínica puede apuntar al gateway sin cambiar su lógica (passthrough con mismo shape).
+- ✅ Cache-hit semántico demostrable y medido (caso 2).
+- ✅ Falso positivo (caso 3) reproducido con umbral laxo y eliminado con `0.90` — antes/después documentado (Día 7).
+- ✅ Filtro de injection bloquea el set de prueba (caso 4, Día 4).
+- ✅ Suite de evals corrida con hit-rate y fp_rate medidos (tokens ahorrados en vez de `$`, por falta de tabla de pricing real — decisión documentada en Día 5).
+- ✅ Latencia por etapa instrumentada (embedding/cache lookup/upstream, hit vs miss).
+- ⏳ **Pendiente-de-deploy:** "desplegado en cloud, responde con la laptop apagada" — bloqueado por cuota de tier gratuito, no por código; repo deploy-ready.
+- ⏳ **Pendiente-de-deploy:** verificación de README contra la URL pública real (el `curl` de "clone → run" local sí está verificado; el tramo Railway del README no se ejecutó contra una URL real).
+
+**Pendiente para cuando se libere cuota o se decida el upgrade:** crear el proyecto en Railway, cargar las 4 env vars, correr los 3 `curl` de verificación del README contra la URL pública, y marcar los dos ítems pendientes como ✅. Fuera de alcance, confirmado: CI gate del sweep de evals, `CASE_STUDY.md`, Loom.
