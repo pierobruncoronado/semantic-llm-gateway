@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.git/
+.pytest_cache/
+docs/
+tests/
+scripts/
+uvicorn_out.txt
+uvicorn_err.txt

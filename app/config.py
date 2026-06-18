@@ -2,7 +2,9 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=False: OS/platform env vars (Railway) win over .env. .env is a
+# local-dev-only fallback, never meant to ship inside the container.
+load_dotenv(override=False)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 if not ANTHROPIC_API_KEY:

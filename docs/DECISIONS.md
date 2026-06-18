@@ -166,3 +166,30 @@ Solo decisiones (qué/por qué/cómo), no narración línea por línea. Referenc
 **Verificación contra criterios de aceptación de la spec (sección 8):** "el falso positivo (caso 3) se reproduce con umbral laxo y se elimina con umbral calibrado — documentado el antes/después" ✅ (umbrales <0.8954 reproducen el FP del trap `p15`/`p12`/etc.; `0.90` lo elimina). "Suite de evals corrida: baseline → resultado, con hit-rate, falso-positivo rate... medidos" ✅. Pendientes de esta sección que siguen sin tocar: deploy en cloud, README reproducible, `CASE_STUDY.md`, Loom — explícitamente fuera de esta sesión.
 
 **Pendiente para próxima sesión:** fase de deploy (Railway) — incluye, si corresponde, wirear este sweep como gate de CI (decisión diferida hoy a propósito, ver discusión de esta sesión); `CASE_STUDY.md`; README reproducible; Loom.
+
+## Día 8 — Fase 6: Deploy a Railway
+
+**Qué:** `Dockerfile` (`python:3.11-slim`, CMD shell-form para expandir `$PORT`), `.dockerignore`, `railway.json` (config-as-code: `healthcheckPath: /health`, `healthcheckTimeout: 300`, `restartPolicyType: ON_FAILURE`), endpoint `GET /health` nuevo en `app/main.py`, `load_dotenv(override=False)` en `app/config.py`, `README.md` y `.env.example` (no existían). El deploy real al dashboard de Railway (crear proyecto, conectar GitHub, cargar las 4 env vars) queda **a cargo del owner**, no de esta sesión — decisión confirmada explícitamente (ver "Cómo" más abajo).
+
+**Por qué reusar el patrón de clínica/Analyst, no el de Analyst para el Dockerfile:** este gateway usa `requirements.txt` + pip (igual que `whatsapp-clinic-agent`), no `pyproject.toml`/`uv` (como `analyst-sql-agen`). El Dockerfile copia el patrón de la clínica: `python:3.11-slim`, instala deps, copia `app/`, `CMD sh -c "uvicorn ... --port ${PORT:-8000}"`.
+
+**Gotcha del session pooler — verificado que NO aplica:** revisé `docs/DECISIONS.md` de `analyst-sql-agen` y `whatsapp-clinic-agent` — el gotcha (Session Pooler puerto 5432 IPv4, conexión directa IPv6-only, transaction pooler rompe prepared statements) es específico de **Postgres/Supabase**. El store de este proyecto es **Upstash Vector** (REST/HTTPS puro, sin conexión de base de datos, sin pooler) — no hay nada análogo que documentar. Confirmado antes de escribir el README, no asumido.
+
+**`GET /health` separado de `/metrics`:** Railway necesita un endpoint de liveness barato para el health check (no quería que cada check le pegue a Anthropic/Upstash ni cuente como tráfico real en las métricas agregadas). `/metrics` queda intacto — solo expone agregados, como hasta ahora.
+
+**`load_dotenv(override=False)`:** mismo gotcha que documentó Analyst Día 4 — en producción, las env vars del platform (Railway) deben ganarle a un `.env` que no debería existir dentro del contenedor. Verificado en el smoke test: `.env` no quedó en la imagen (`.dockerignore` lo excluye) y el contenedor levantó correctamente solo con `--env-file .env` pasado por Docker al entorno del proceso, no como archivo.
+
+**Cómo se decidió el flujo del deploy (confirmado con el owner antes de tocar Railway):** el Railway CLI ya estaba instalado y autenticado en esta máquina (reusado de sesiones de clínica/Analyst). Se preguntó explícitamente si el owner quería que yo manejara el deploy por CLI (creando proyecto/recursos) o si lo hacía él mismo en el dashboard, dado que es una acción sobre infraestructura externa compartida con costo. El owner eligió **dashboard manual** — mismo patrón que clínica/Analyst. Esta sesión deja el repo listo para ese flujo (Dockerfile autodetectable, `railway.json`, README con los pasos exactos) pero no ejecuta el deploy.
+
+**Input → output verificado (smoke test real, antes de tocar Railway):**
+- `docker build -t semantic-llm-gateway:smoke .` → build exitoso, 34.8s instalando deps + capas.
+- `docker run -d --env-file .env -e PORT=8000 -p 8123:8000 ...` → contenedor up.
+- `GET /health` → `200 {"status":"ok"}`.
+- `GET /metrics` → `200`, contadores en cero (contenedor recién levantado).
+- `POST /v1/messages` (prompt real) → `200`, respuesta real de Anthropic (`"text": "railway-smoke-test"`), log estructurado `{"event": "request_complete", ..., "cache_hit": false, "embedding_ms": 1095.0, "cache_lookup_ms": 720.5, "upstream_ms": 811.2, "injection_blocked": false}` impreso a stdout del contenedor.
+- Verificado `.env` NOT_FOUND dentro de la imagen (`docker exec gw-smoke sh -c "test -f /app/.env"`) — confirma que `.dockerignore` funciona y no hay secrets horneados en la imagen.
+- Contenedor de prueba detenido y eliminado (`docker stop/rm gw-smoke`) tras la verificación.
+
+**Verificación contra criterios de aceptación de la spec (sección 8):** "Desplegado en cloud, responde con la laptop apagada" y "README reproducible (clonar → correr en <10min)" quedan **pendientes de que el owner complete el deploy en el dashboard** — el repo está listo (Dockerfile probado localmente con build+run real, README con pasos exactos de Railway y verificación post-deploy con `curl`), pero el ítem no se marca ✅ hasta que la URL pública responda con la laptop apagada.
+
+**Pendiente para próxima sesión:** el owner completa el deploy manual en el dashboard de Railway (crear proyecto, conectar GitHub, cargar las 4 env vars); correr el smoke test contra la URL pública una vez asignada; marcar los dos criterios de aceptación pendientes. Fuera de alcance, confirmado: CI gate del sweep de evals, `CASE_STUDY.md`, Loom.

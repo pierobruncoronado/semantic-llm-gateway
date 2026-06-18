@@ -54,6 +54,11 @@ def _cache_key_text(messages: list[MessageIn]) -> str | None:
     return None
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.get("/metrics")
 async def get_metrics():
     return metrics.snapshot()
