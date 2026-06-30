@@ -141,4 +141,9 @@ Explicitly out of scope for v1, by design, not by oversight:
 
 ## 9. Honest scope note
 
-Every acceptance criterion in `docs/spec.md` §8 is met except cloud deployment: the repo is deploy-ready (Dockerfile, `railway.json` with a health check, a README with exact dashboard steps), and a real Docker smoke test — build, run, `/health`, `/metrics`, and a live `/v1/messages` call against Anthropic — passed end-to-end locally. What didn't happen is creating the Railway project itself, because the account's free tier already has two other active projects (the clinic agent, the SQL analyst) and the plan doesn't allow a third without an upgrade. That's an account-quota constraint, not a technical failure — the integration is proven; what's missing is one more cloud resource slot. Completing it is a single follow-up session once quota is freed or upgraded: create the project, load four env vars, run the three `curl` checks from the README against the live URL.
+Portfolio project. Every acceptance criterion in `docs/spec.md` §8 is met except the live cloud
+URL: the repo is deploy-ready (Dockerfile smoke-tested locally — build, run, `/health`,
+`/metrics`, and a live `/v1/messages` call against Anthropic all passed; `railway.json` health
+check configured; README with exact dashboard steps). No public URL yet. Completing it is one
+session: create the Railway project, load four env vars, verify the three `curl` checks from the
+README against the live URL.
