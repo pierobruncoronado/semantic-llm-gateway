@@ -265,13 +265,26 @@ Render sin tocar Anthropic/Upstash.
 - **No persistent disk:** el gateway no escribe nada a disco en runtime (store = Upstash Vector vía
   REST, logs = stdout). Sin impacto.
 
+**Render service creado vía CLI:** `semantic-llm-gateway` · ID `srv-d92b5rdckfvc73dg6no0` ·
+URL `https://semantic-llm-gateway.onrender.com` · región oregon · rama master.
+
 **Env vars configuradas en Render (nombres, sin valores):**
 - `ANTHROPIC_API_KEY`
 - `UPSTASH_VECTOR_REST_URL`
 - `UPSTASH_VECTOR_REST_TOKEN`
 - `VOYAGE_API_KEY`
 
-**Verificación post-deploy:**
-- `GET /health` → `{"status": "ok"}` ✓
-- `GET /metrics` → contadores en cero (servicio recién levantado) ✓
-- `POST /v1/messages` con prompt simple → respuesta real de Anthropic, log estructurado en stdout ✓
+**Estado al cierre de sesión:** servicio creado, env vars pendientes de confirmación, build
+lanzado automáticamente pero fallará hasta que las vars queden aplicadas. Render CLI
+(`render.exe v2.21.0`, instalado en `%LOCALAPPDATA%\render-cli`) autenticado con la cuenta
+del owner. Scripts de configuración de env vars preparados en el scratchpad de sesión;
+pendientes de ejecución por el owner.
+
+**Verificación post-deploy (pendiente):**
+- [ ] `GET /health` → `{"status": "ok"}`
+- [ ] `GET /metrics` → contadores en cero (servicio recién levantado)
+- [ ] `POST /v1/messages` con prompt simple → respuesta real de Anthropic, log estructurado en stdout
+- [ ] Actualizar README con la URL de Render `https://semantic-llm-gateway.onrender.com`
+
+**Pendiente para próxima sesión:** completar verificación post-deploy, actualizar README con URL,
+Loom (90s, enlazado en el README).
