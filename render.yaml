@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: semantic-llm-gateway
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: UPSTASH_VECTOR_REST_URL
+        sync: false
+      - key: UPSTASH_VECTOR_REST_TOKEN
+        sync: false
+      - key: VOYAGE_API_KEY
+        sync: false

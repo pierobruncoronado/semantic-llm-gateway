@@ -232,3 +232,46 @@ Solo decisiones (qué/por qué/cómo), no narración línea por línea. Referenc
 - Siguen pendientes: deploy real (bloqueado por cuota, sin cambios) y Loom (no se tocó esta sesión, fuera de alcance).
 
 **Pendiente para próxima sesión:** Loom (90s, enlazado en el README); deploy a Railway cuando se libere cuota o se decida upgrade.
+
+## Día 10 — Deploy a Render (cambio de plataforma desde Railway)
+
+**Qué:** primer deploy en producción del gateway. Se eligió Render (free tier, Docker web service)
+en lugar de Railway. Archivos añadidos: `render.yaml` (Render Blueprint IaC — nombre del servicio,
+plan free, `healthCheckPath: /health`, cuatro env var slots sin valores). README actualizado con la
+URL de Render una vez confirmado el deploy.
+
+**Por qué Render y no Railway:** Railway free tier ya tenía dos proyectos activos
+(`whatsapp-clinic-agent` y `analyst-sql-agent`). El límite del tier gratuito bloqueó el deploy del
+gateway en la sesión Día 8. Al mismo tiempo, `analyst-sql-agent` migró de Railway a Render (sesión
+paralela), liberando el slot de Railway — pero se optó por mantener el gateway en Render también,
+consolidando los dos proyectos no-webhook en la misma plataforma.
+
+**Por qué el gateway SÍ puede ir a Render (cold start no es bloqueante aquí):**
+`whatsapp-clinic-agent` no puede moverse a Render porque el cold start de 30-60s es incompatible
+con el timeout de 15s de Twilio. El gateway no tiene ese constraint: sus clientes son apps (p. ej.
+la clínica apuntando su URL upstream) que pueden tolerar latencia variable en la primera request,
+y no hay ningún webhook externo con timeout duro. El endpoint `/health` absorbe el health check de
+Render sin tocar Anthropic/Upstash.
+
+**Trade-offs aceptados:**
+- **Cold start (30-60s después de 15 min idle):** la primera request tras inactividad sufre el cold
+  start. Aceptable para un portfolio demo sin SLA de producción. Los clientes del gateway (apps con
+  LLM) deberían tener su propio retry/timeout — no hay un timeout externo fijo como Twilio.
+- **In-memory metrics y rate limiter:** los contadores de `app/metrics.py` y el sliding window de
+  `app/abuse.py` viven en el proceso. Render free tier corre una sola instancia — mismo supuesto
+  que ya documentó Día 5 (un worker, sin lock). Si Render spins down el servicio y luego lo reactiva
+  (cold start), los contadores de métricas se reinician a cero. Aceptado: las métricas son una
+  herramienta de demo/observabilidad, no un audit log persistente.
+- **No persistent disk:** el gateway no escribe nada a disco en runtime (store = Upstash Vector vía
+  REST, logs = stdout). Sin impacto.
+
+**Env vars configuradas en Render (nombres, sin valores):**
+- `ANTHROPIC_API_KEY`
+- `UPSTASH_VECTOR_REST_URL`
+- `UPSTASH_VECTOR_REST_TOKEN`
+- `VOYAGE_API_KEY`
+
+**Verificación post-deploy:**
+- `GET /health` → `{"status": "ok"}` ✓
+- `GET /metrics` → contadores en cero (servicio recién levantado) ✓
+- `POST /v1/messages` con prompt simple → respuesta real de Anthropic, log estructurado en stdout ✓
